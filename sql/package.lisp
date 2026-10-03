@@ -40,7 +40,8 @@
           #+ecl #:mop
           #+lispworks #:clos
           #+scl #:clos
-          #+openmcl #:openmcl-mop)
+          #+openmcl #:openmcl-mop
+          #+dotcl #:dotcl-mop)
 
     #+allegro
     (:shadowing-import-from

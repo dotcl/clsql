@@ -108,6 +108,9 @@
     (mp:make-lock :name "CLSQL" :important-p nil :safep t :recursivep nil
                   :sharing t)))
 
+#+dotcl
+(defvar +dotcl-global-lock+ (dotcl:make-recursive-lock "CLSQL"))
+
 (defmacro without-interrupts (&body body)
   #+allegro `(mp:without-scheduling ,@body)
   #+clisp `(progn ,@body)
@@ -118,7 +121,12 @@
       `(mp:with-exclusive-lock (+lw-global-lock+)
          ,@body))
   #+openmcl `(ccl:without-interrupts ,@body)
-  #+sbcl `(sb-sys::without-interrupts ,@body))
+  #+sbcl `(sb-sys::without-interrupts ,@body)
+  #+dotcl
+  `(progn
+     (dotcl:acquire-lock +dotcl-global-lock+)
+     (unwind-protect (progn ,@body)
+       (dotcl:release-lock +dotcl-global-lock+))))
 
 (defun make-process-lock (name)
   #+allegro (mp:make-process-lock :name name)
@@ -127,11 +135,12 @@
   #+openmcl (ccl:make-lock name)
   #+sb-thread (sb-thread:make-mutex :name name)
   #+scl (thread:make-lock name)
-  #-(or allegro cmu lispworks openmcl sb-thread scl) (declare (ignore name))
-  #-(or allegro cmu lispworks openmcl sb-thread scl) nil)
+  #+dotcl (dotcl:make-recursive-lock name)
+  #-(or allegro cmu lispworks openmcl sb-thread scl dotcl) (declare (ignore name))
+  #-(or allegro cmu lispworks openmcl sb-thread scl dotcl) nil)
 
 (defmacro with-process-lock ((lock desc) &body body)
-  #+(or cmu allegro lispworks openmcl sb-thread)
+  #+(or cmu allegro lispworks openmcl sb-thread dotcl)
   (declare (ignore desc))
   #+(or allegro cmu lispworks openmcl sb-thread)
   (let ((l (gensym)))
@@ -143,9 +152,15 @@
       #+sb-thread (sb-thread:with-recursive-lock (,l) ,@body)
       ))
   #+scl `(thread:with-lock-held (,lock ,desc) ,@body)
-  #-(or cmu allegro lispworks openmcl sb-thread scl) (declare
-                                                      (ignore lock desc))
-  #-(or cmu allegro lispworks openmcl sb-thread scl) `(progn ,@body))
+  #+dotcl
+  (let ((l (gensym)))
+    `(let ((,l ,lock))
+       (dotcl:acquire-lock ,l)
+       (unwind-protect (progn ,@body)
+         (dotcl:release-lock ,l))))
+  #-(or cmu allegro lispworks openmcl sb-thread scl dotcl) (declare
+                                                            (ignore lock desc))
+  #-(or cmu allegro lispworks openmcl sb-thread scl dotcl) `(progn ,@body))
 
 (defun sql-escape-quotes (s)
   "Escape quotes for SQL string writing"
@@ -376,7 +391,8 @@ list of characters and replacement strings."
               :key #'string))
   #+lispworks (lw:environment-variable (string var))
   #+ccl (ccl::getenv var)
-  #+sbcl (sb-ext:posix-getenv var))
+  #+sbcl (sb-ext:posix-getenv var)
+  #+dotcl (dotcl:getenv (string var)))
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (when (char= #\a (schar (symbol-name '#:a) 0))
@@ -463,7 +479,7 @@ removed. keys are searched with #'MEMBER"
     ;;clearing mechanism. If you are on an implementation that doesn't support
     ;;weak hash tables then you're memory may accumulate.
 
-    #-(or sbcl allegro clisp lispworks ccl)
+    #-(or sbcl allegro clisp lispworks ccl dotcl)
     (warn "UNSAFE! use of weak hash on implementation without support. (see clsql/sql/utils.lisp to add)")
 
     (make-hash-table
@@ -472,6 +488,7 @@ removed. keys are searched with #'MEMBER"
       #+lispworks :weak-kind #+lispworks :value
       #+sbcl :weakness #+sbcl :value
       #+ccl :weak #+ccl :value
+      #+dotcl :weakness #+dotcl :value
       ,@args)
     ))
 

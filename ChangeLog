@@ -1,3 +1,11 @@
+2026-10-04 Masatoshi Sano <snmsts@gmail.com>
+	* sql/package.lisp, sql/metaclasses.lisp, sql/utils.lisp: Add
+	support for dotcl (Common Lisp on .NET). As on ECL and ABCL, the
+	LOOP extension for iterating over records is not available.
+	* sql/utils.lisp: On dotcl, WITHOUT-INTERRUPTS holds a global
+	recursive lock, as on LispWorks 6 and later, and
+	MAKE-PROCESS-LOCK / WITH-PROCESS-LOCK use real locks.
+
 2022-10-28 Kevin Rosenberg <kevin@rosenberg.net>
 	* Version 6.7.2 release
 	* LICENSE: After consulting with the contributors to CLSQL,
